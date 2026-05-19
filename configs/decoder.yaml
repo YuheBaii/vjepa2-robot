@@ -1,0 +1,27 @@
+# MLP Decoder training configuration
+# JEPA encoder is frozen, only the decoder is trained.
+
+encoder:
+  checkpoint_dir: checkpoints
+  dtype: float16
+
+decoder:
+  embed_dim: 1280
+  hidden_dim: 512
+  num_layers: 3
+
+data:
+  h5_path: data/rlbench_pick_and_lift.h5
+  train_ratio: 0.8
+
+training:
+  batch_size: 64
+  lr: 0.001
+  weight_decay: 0.0001
+  epochs: 50
+  num_workers: 4
+  prefetch_factor: 2
+
+loss:
+  ee_pos_weight: 1.0
+  contact_weight: 0.5

@@ -1,0 +1,32 @@
+# V-JEPA 2-AC Robot default configuration
+# Override via command-line args or custom config files.
+
+encoder:
+  checkpoint_dir: checkpoints
+  dtype: float16
+
+predictor:
+  embed_dim: 1280
+  action_dim: 7
+  hidden_dim: 512
+  num_layers: 4
+
+planner:
+  horizon: 10
+  num_samples: 200
+  num_elites: 20
+  num_iters: 3
+
+env:
+  name: Lift
+  render_size: 256
+  control_freq: 20
+
+training:
+  batch_size: 32
+  lr: 0.0003
+  epochs: 100
+  seq_len: 16
+
+data:
+  h5_path: data/trajectories.h5

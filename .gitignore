@@ -1,0 +1,39 @@
+# Model weights & checkpoints
+checkpoints/*.safetensors
+checkpoints/*.pth
+checkpoints/*.pt
+checkpoints/*.bin
+checkpoints/decoder/
+checkpoints/original/
+
+# Datasets
+data/*.h5
+data/*.hdf5
+
+# Results / rendered images
+results/
+
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logs
+*.log
+install.log
+wandb/
+
+# Conda / venv
+.env
+.venv/
+
+# IDE
+.vscode/
+.idea/
