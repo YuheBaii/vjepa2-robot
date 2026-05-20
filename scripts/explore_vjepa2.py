@@ -7,6 +7,7 @@ V-JEPA 2 模型使用指南
   3. 图像 vs 视频的输入区别
 """
 
+import math
 import torch
 from transformers import VJEPA2Model, AutoVideoProcessor
 
@@ -22,10 +23,17 @@ model.to(DEVICE).eval()
 
 # 模型基本信息
 cfg = model.config
-print(f"模型:      ViT-H  hidden_size={cfg.hidden_size}")          # 1280
-print(f"patch_size={cfg.patch_size}  image_size={cfg.image_size}") # 16, 256
-n_patches = (cfg.image_size // cfg.patch_size) ** 2
-print(f"空间 patch 数: {n_patches}")   # (256//16)^2 = 256
+print(f"模型:        ViT-H  hidden_size={cfg.hidden_size}")           # 1280
+print(f"patch_size={cfg.patch_size}  image_size={cfg.image_size}")    # 16, 256
+print(f"tubelet_size={cfg.tubelet_size}")                             # 2
+
+# 空间 patch 数（每帧）
+n_spatial = (cfg.image_size // cfg.patch_size) ** 2                  # 256
+print(f"空间 patch 数 (每帧): {n_spatial}")
+
+# 时间 token 数 = ceil(T / tubelet_size)
+# 即每 tubelet_size 帧合并为 1 个时间 token
+# 总 token 数 = n_tubelets * n_spatial
 
 # ─────────────────────────────────────────────
 # 2. 输入格式
@@ -45,18 +53,19 @@ with torch.no_grad():
 # ─────────────────────────────────────────────
 # 3. 输出格式
 # ─────────────────────────────────────────────
-# last_hidden_state: (B, N_spatial * T, hidden_size)
-#   N_spatial = 256（每帧的空间 patch 数）
-#   T = 输入帧数
+# last_hidden_state: (B, n_tubelets * n_spatial, hidden_size)
+#   n_tubelets = ceil(T / tubelet_size) = ceil(16/2) = 8   ← 时间维度也被 patch 化
+#   n_spatial  = 256                                        ← 每帧空间 patch 数
 #   hidden_size = 1280
+#   总 token 数 = 8 * 256 = 2048
 z = out.last_hidden_state
+n_tubelets = math.ceil(T / cfg.tubelet_size)
 print(f"\n[视频] 输入: {tuple(video.shape)}")
-print(f"[视频] 输出: {tuple(z.shape)}")   # (2, 256*16, 1280) = (2, 4096, 1280)
+print(f"[视频] 输出: {tuple(z.shape)}")  # (2, 2048, 1280)
 
-# 如果只需要每帧的空间特征，把时间轴 reshape 出来再 squeeze
-# z_per_frame: (B, T, N_spatial, hidden_size)
-z_per_frame = z.view(B, T, n_patches, cfg.hidden_size)
-print(f"[视频] 每帧特征: {tuple(z_per_frame.shape)}")  # (2, 16, 256, 1280)
+# reshape 成 (B, n_tubelets, n_spatial, hidden_size) 方便按时间索引
+z_by_tube = z.view(B, n_tubelets, n_spatial, cfg.hidden_size)
+print(f"[视频] reshape: {tuple(z_by_tube.shape)}")  # (2, 8, 256, 1280)
 
 # ─────────────────────────────────────────────
 # 4. 单张图像输入
@@ -66,7 +75,8 @@ print(f"[视频] 每帧特征: {tuple(z_per_frame.shape)}")  # (2, 16, 256, 1280
 
 image = torch.rand(B, C, H, W, dtype=torch.float16, device=DEVICE)
 
-# 方式 A：T=1（本项目用法，输出直接是空间 patches）
+# 方式 A：T=1（本项目用法）
+# ceil(1 / tubelet_size=2) = 1 tubelet，输出 1 * 256 = 256 tokens
 image_input_t1 = image.unsqueeze(1)           # (B, 1, C, H, W)
 with torch.no_grad():
     z_img_t1 = model(pixel_values_videos=image_input_t1).last_hidden_state
@@ -74,12 +84,13 @@ print(f"\n[图像 T=1] 输入: {tuple(image_input_t1.shape)}")
 print(f"[图像 T=1] 输出: {tuple(z_img_t1.shape)}")   # (2, 256, 1280)
 
 # 方式 B：复制 16 帧（与视频模式对齐，部分下游任务要求固定 T）
+# ceil(16 / 2) = 8 tubelets → 8 * 256 = 2048 tokens
 T_rep = 16
 image_input_t16 = image.unsqueeze(1).expand(-1, T_rep, -1, -1, -1)  # (B, 16, C, H, W)
 with torch.no_grad():
     z_img_t16 = model(pixel_values_videos=image_input_t16).last_hidden_state
 print(f"\n[图像 T=16] 输入: {tuple(image_input_t16.shape)}")
-print(f"[图像 T=16] 输出: {tuple(z_img_t16.shape)}")  # (2, 4096, 1280)
+print(f"[图像 T=16] 输出: {tuple(z_img_t16.shape)}")  # (2, 2048, 1280)
 
 # ─────────────────────────────────────────────
 # 5. 使用官方 AutoVideoProcessor（可选）
